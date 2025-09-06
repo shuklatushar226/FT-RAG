@@ -1,0 +1,135 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+.venv/
+env/
+.env/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment Variables
+.env
+.env.local
+.env.production
+.env.staging
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Qdrant Data
+storage/
+qdrant_storage/
+
+# Model Files
+*.bin
+*.safetensors
+*.onnx
+*.pt
+*.pth
+model/
+models/
+checkpoints/
+
+# Fine-tuning Output
+ft/out/
+ft/outputs/
+ft/runs/
+ft/logs/
+ft/wandb/
+
+# Large Training Data Files (keep structure, not data)
+ft/sft.jsonl
+ft/sft_readable.json
+
+# Ingested Repository Data
+data/repos/
+repos/
+
+# Temporary Files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.override.yml
+
+# Local Binaries (download separately)
+qdrant
+
+# API Testing
+*.http
+.httpie/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# MLflow
+mlruns/
+
+# Weights & Biases
+wandb/
+
+# Cache
+.cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local Configuration
+local_config.py
+config_local.py
+settings_local.py

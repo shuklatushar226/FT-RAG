@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+langchain
+qdrant-client
+sentence-transformers
+transformers
+accelerate
+gitpython
+python-dotenv
+axolotl
+peft
+safetensors
+torch
