@@ -2,7 +2,7 @@ from fastapi import FastAPI, Body, Request, Header, HTTPException, BackgroundTas
 from typing import Optional, Dict, Any
 import hmac, hashlib, os, asyncio
 from concurrent.futures import ThreadPoolExecutor
-from app.ingest import upsert_repo, upsert_repo_optimized
+from app.ingest import upsert_repo, upsert_repo_optimized, upsert_repo_incremental
 from app.rag_langchain import make_qa_chain
 from app.settings import settings
 import uuid
@@ -107,6 +107,40 @@ async def ingest_large(
         "note": "For private repositories, include 'X-GitHub-Token' header or set GITHUB_TOKEN in .env"
     }
 
+@app.post("/ingest/incremental")
+async def ingest_incremental(
+    repos: list[str], 
+    background_tasks: BackgroundTasks,
+    github_token: Optional[str] = Header(None, alias="X-GitHub-Token")
+):
+    """Incremental ingestion endpoint that only processes changed files since last update."""
+    job_ids = []
+    
+    for repo_url in repos:
+        job_id = str(uuid.uuid4())
+        
+        # Initialize job tracking
+        ingestion_jobs[job_id] = {
+            "repo_url": repo_url,
+            "status": "queued",
+            "started_at": datetime.now().isoformat(),
+            "progress": 0,
+            "result": None,
+            "error": None,
+            "type": "incremental"
+        }
+        
+        # Add background task with incremental processing
+        background_tasks.add_task(process_incremental_repo, job_id, repo_url, github_token)
+        job_ids.append(job_id)
+    
+    return {
+        "message": f"Queued {len(repos)} repositories for incremental processing",
+        "job_ids": job_ids,
+        "status_endpoint": "/ingest/status/{job_id}",
+        "note": "Only changed files will be processed. For private repositories, include 'X-GitHub-Token' header."
+    }
+
 @app.get("/ingest/status/{job_id}")
 async def get_ingestion_status(job_id: str):
     """Get the status of a background ingestion job."""
@@ -148,6 +182,34 @@ async def process_large_repo(job_id: str, repo_url: str, github_token: str = Non
             "failed_at": datetime.now().isoformat()
         })
 
+async def process_incremental_repo(job_id: str, repo_url: str, github_token: str = None):
+    """Background task for incremental repository processing."""
+    try:
+        # Update job status
+        ingestion_jobs[job_id]["status"] = "processing"
+        ingestion_jobs[job_id]["progress"] = 10
+        
+        # Run the incremental ingestion in thread pool
+        result = await asyncio.get_event_loop().run_in_executor(
+            executor, upsert_repo_incremental, repo_url, 'data/repos', github_token
+        )
+        
+        # Update job completion
+        ingestion_jobs[job_id].update({
+            "status": "completed",
+            "progress": 100,
+            "result": result,
+            "completed_at": datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        # Update job error
+        ingestion_jobs[job_id].update({
+            "status": "failed",
+            "error": str(e),
+            "failed_at": datetime.now().isoformat()
+        })
+
 def verify_github_signature(secret, payload_body, signature_header):
     if not signature_header:
         return False
@@ -158,7 +220,7 @@ def verify_github_signature(secret, payload_body, signature_header):
 
 @app.post("/webhook/github")
 async def gh_webhook(request: Request, x_hub_signature_256: Optional[str] = Header(None)):
-    """GitHub webhook handler with optimized processing."""
+    """GitHub webhook handler with incremental processing and branch filtering."""
     body = await request.body()
     if settings.WEBHOOK_SECRET:
         ok = verify_github_signature(settings.WEBHOOK_SECRET, body, x_hub_signature_256)
@@ -166,15 +228,35 @@ async def gh_webhook(request: Request, x_hub_signature_256: Optional[str] = Head
             raise HTTPException(status_code=403, detail="Invalid signature")
     
     payload = await request.json()
+    
+    # Branch filtering - only process main/master branch pushes
+    ref = payload.get('ref', '')
+    if ref not in ['refs/heads/main', 'refs/heads/master']:
+        return {
+            "status": "skipped",
+            "reason": f"Only main/master branch pushes are processed. Received: {ref}",
+            "ref": ref
+        }
+    
+    # Only process push events
+    if payload.get('repository') is None:
+        return {
+            "status": "skipped", 
+            "reason": "Not a repository push event"
+        }
+    
     repo_url = payload.get('repository', {}).get('html_url', '')
     if repo_url and not repo_url.endswith('.git'):
         repo_url += '.git'
     
     if repo_url:
-        # Use optimized ingestion for webhook updates
+        # Use incremental ingestion for webhook updates
+        print(f"🔔 Webhook triggered for {repo_url} on {ref}")
         result = await asyncio.get_event_loop().run_in_executor(
-            executor, upsert_repo_optimized, repo_url
+            executor, upsert_repo_incremental, repo_url
         )
+        result['trigger'] = 'webhook'
+        result['branch'] = ref
         return result
     
     return {"skipped": True}
